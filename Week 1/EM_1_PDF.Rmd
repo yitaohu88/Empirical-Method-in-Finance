@@ -1,0 +1,197 @@
+---
+title: "Empirical Methods Homework 1"
+author: "YiTao Hu, Jin (Jane) Huangfu, Charles Rambo, Junyu (Kevin) Wu"
+date: "1/14/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problem 1
+
+### Question 1
+We obtained the Fama/French 5 Factors (2x3) CSV file from
+\[
+\texttt{https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data\_library.html}.
+\]
+For simplicity, we added an eighth column which was a date with a hyphen between the year and month in Excel, so R would be able to recognize the date. We then replaced the first column with our modification. The annualized arithmetic mean was 3.111669\%, annualized geometric mean was 2.868361\%, and a standard deviation was 7.472613\%.
+
+```{r}
+data <- read.csv(file=file.choose(), header=TRUE, sep=",", skip = 3, nrows = 677)
+names(data) <- c("Date", "Mkt.RF", "SMB", "HML", "RMW", "CMA", "RF")
+rmw <- data$RMW
+plot(x = data$Date, y = rmw, type="b", xlab = "Date", ylab = "RMW")
+arith_average_retun <- 12*mean(rmw)
+geo_average_return <- 100*(prod(1 + rmw/100)^(12/length(rmw)) - 1)
+standard_deviation <- sqrt(12)*sd(rmw)
+arith_average_retun
+geo_average_return
+standard_deviation
+```
+### Question 2
+The autocorrelations are, on balance, positive until the 11th, and they are net negaitve until the 41st, though there are a few positive autocorrelations so the cumulative sum is not decreasing monotonically, e.g. the 22nd lag appears to be positive. 
+
+From the graph of the acf function, we see that the only statistically significant lags are the 1st, 7th, 11th, 13th, 20th, 30th, and 32nd. 
+
+From these observations, we can conclude that the past performance of the rmw factor has some statistically significant predictability of its future performance. 
+```{r}
+acf(rmw, lag.max = 60)
+autocorrelations <- as.vector(acf(rmw, lag.max = 60)$acf)
+cumulative_autocorrelations <-  cumsum(autocorrelations[-1])
+plot(x = 1:60, y = cumulative_autocorrelations, type = "l", xlab = "Lag", 
+     ylab = "Cumulative Autocorrelations" )
+```
+
+
+### Question 3
+We will perform a Box-Ljung test on the data. The hypothesis test is of the form
+$$
+H_0: \rho_1 = \rho_2 = \ldots =\rho_6 = 0\quad H_a: \rho_i \neq 0\ \text{for some }i
+$$
+The Box-Ljung test is a special test of chi-square test with adjustment on degree of freedom. In particular, the Box-Ljung statistics is calculated in such a way 
+$$Q(6)=T(T+2)\sum_{i=1}^{6}\frac{\hat\rho^2}{T-i}$$ 
+we assume $Q(m)$  follows $\chi^2(m)$
+
+The $p$-value of our test is $0.0004246266$. Hence, we reject the null hypothesis that the first six autocorrelations are all zero at a significance level of 5\%, i.e. at least one is non-zero.
+```{r}
+library(stats)
+Box.Ljung <- Box.test(rmw, lag = 6, type = "Ljung-Box")
+p_value <- Box.Ljung$p.value
+p_value
+```
+
+### Question 4
+Via examination of the acf plot of the regression residuals, it is clear that $AR(1)$ is the optimal model, because the residuals are not autocorrelated. 
+$$
+rmw_{t + 1} = \alpha + \beta'rmw_{t} + \epsilon_{t + 1}.
+$$
+Note that we replaced the NA in the lagged RMW variable with the frist entry of RMW to avoid errors in our calculations later.
+```{r}
+library(Hmisc)
+lag_rmw <- Lag(rmw, shift = 1)
+lag_rmw[1] <- rmw[1]
+model <- lm(rmw ~ lag_rmw)
+summary(model)
+```
+We preformed a Box-Ljung test on the residuals to affirm that we have obtained all meaningul autocoreelations and got a $p$-value of approximitely 48\%. As a result, we do not reject the null hypothesis that the first six autocorrelations are all zero.
+```{r}
+Box.Ljung.residuals <- Box.test(model$residuals, lag = log(length(model$residuals)), type = "Ljung-Box")
+Box.Ljung.residuals$p.value
+```
+
+The fact that an $AR(1)$ is well suited for this data is somewhat intuitive because we would expect investors' expectation of ROE on the returns of stocks to be relatively stable overtime but we do not expect the relationship to be strong or long lasting because, if it were, more investors would simply utilize the strategy and inflate the stock price and therefore reduce future returns.
+
+
+### Question 5
+We will calculate the variances by means of matracies. Note that
+\begin{align*}
+\hat{\beta} &= (X'X)^{-1}X'y\\
+            &= (X'X)^{-1}X'(X\beta + \epsilon)\\
+            &= (X'X)^{-1}X'X\beta + (X'X)^{-1}X'\epsilon\\
+            &= \beta + (X'X)^{-1}X'\epsilon
+\end{align*}
+Thefore, we have
+\begin{align*}
+Var(\hat{\beta}) &= E\left[(\hat{\beta} - \beta)(\hat{\beta} - \beta)'\right]\\
+                  & = E\left[\Big((X'X)^{-1}X'\epsilon\Big) \Big((X'X)^{-1}X'\epsilon\Big)'\right]\\
+                  &= E\left[(X'X)^{-1}X'\epsilon\epsilon'X(X'X)^{-1}\right]\\
+                  &= (X'X)^{-1}X'E\left[\epsilon\epsilon'\right]X(X'X)^{-1}
+\end{align*}
+When we consider $Var^{OLS}$, we suppose 
+$$E\left[\epsilon\epsilon'\right] = \sigma^2 I,$$
+which makes are equation 
+$$Var^{OLS}(\hat{\beta}) = \sigma^2 (X'X)^{-1}.$$ 
+For the White estimator, we suppose that 
+$$E\left[\epsilon\epsilon'\right] = ee' =: \Lambda,$$ 
+where $e = y - X\hat{\beta}$. This gives,
+$$Var^{White}(\hat{\beta}) = (X'X)^{-1}X' \Lambda X(X'X)^{-1}.$$ 
+
+In our particular case, we are interested in the lower right entries. Hence, for the OLS variance, we obtain $0.001439951$ and for the White variance we obtain $0.01261432$. Taking square roots leads us to conclude that the OLS and White standard errors are 0.03794669 and and 0.1123135, respectively. 
+```{r}
+X <- matrix(1,  nrow = length(lag_rmw), ncol = 2)
+X[, 2] <- lag_rmw
+sigma_squared_ols <- var(model$residuals) 
+var_ols <- sigma_squared_ols*solve(t(X) %*% X)
+var_ols[2, 2]
+SE_ols <- sqrt(var_ols[2, 2])
+SE_ols 
+Lambda <- diag(model$residuals^2)
+var_white <- solve(t(X) %*% X) %*% t(X) %*% Lambda %*% X %*% solve(t(X) %*% X)
+var_white[2, 2]
+SE_white <- sqrt(var_white[2, 2])
+SE_white
+```
+
+## Problem 2
+We provide the code for a our simulation below.
+```{r}
+set.seed(42)
+mu <- 0.005
+sigma <- 0.04
+N <- 10000
+T <- 600
+
+betas_r <- c()
+betas_p <- c()
+p_1 <- c(0)
+p_2 <- c(0)
+
+for(k in 1:N){
+  epsilon_1 <- rnorm(T)
+  epsilon_2 <- rnorm(T)
+  r_1 <- mu + sigma*epsilon_1
+  r_2 <- mu + sigma*epsilon_2
+  betas_r[k] <- lm(r_1 ~ r_2)$coef[2]
+  for(l in 2:(T+1)){
+    p_1[l] <- p_1[l - 1] + r_1[l - 1]
+    p_2[l] <- p_2[l - 1] + r_2[l - 1]
+  }
+  betas_p[k] <- lm(p_1 ~ p_2)$coef[2]
+}
+```
+
+### Question 1
+Note we can prove the theoretical $\beta=0$ and $Var(\hat\beta_1)=\frac{1}{T-1}$. The proof is as followed. 
+
+Because, $\epsilon$ is i.i.d. standard normal, and 
+$$r_{1,t}=\mu+\sigma\epsilon_{1,t}$$
+$$r_{1,t}=\mu+\sigma\epsilon_{1,t}$$
+
+We can conclude $$r_{1,t}\sim N(\mu,\sigma^2)$$ 
+and $$r_{2,t}\sim N(\mu,\sigma^2)$$
+
+and $r_{1,t}$ is independent of $r_{2,t}$. 
+
+So the theoretical $\beta=0$
+
+Because the theoretical $\beta=0$, the regression model should be $$r_{1,t}=\alpha+\epsilon_t$$
+where $\alpha=\mu$ and $\epsilon_t=\epsilon_{1,t}$
+
+Recall the formula for variance of the regression co-efficient: $$Var(\hat\beta_1)=\frac{\sigma_{\epsilon}^2}{(N-1)*\sigma_{X}^2}$$
+
+In this case $\sigma_x=\sigma_{r_{2,t}}=\sigma^2=\sigma^2_{\epsilon_t}$ and N=T
+
+Therefore, $$Var(\hat\beta_1)=\frac{1}{T-1}=\frac{1}{599}$$, which implies $$\sigma_{\hat\beta_1}=\sqrt{\frac{1}{599}}=0.04085889232$$, which is very close to our simulation result. 
+
+The mean value of $\beta^*$ in question 1 is $0.0001563299$ and the standard deviation is $0.04082026$. The 95\% confidence interval is $\left(-0.07975113, 0.08026071 \right)$. Hence, at a 5\% significance level, we fail to reject the null hypothesis that $\beta = 0$.
+```{r}
+mean_beta_r <- mean(betas_r)
+sd_beta_r <- sd(betas_r)
+mean_beta_r
+sd_beta_r
+quantile(betas_r, c(0.025, 0.975))
+hist(betas_r)
+```
+
+### Question 2
+For question 2, the mean value of $\beta^*$ is $-0.01283888$ and the standard deviation is $0.02587436$. The 95\% confidence interval is $(0.2373364, 2.1884223)$. Therefore, at a 95\% confidence level, we reject the null hypothesis that $\beta = 0$.
+```{r}
+mean_beta_p <- mean(betas_p)
+sd_beta_p <- sd(betas_p)
+mean_beta_p
+sd_beta_p
+quantile(betas_p, c(0.025, 0.975))
+hist(betas_p)
+```
