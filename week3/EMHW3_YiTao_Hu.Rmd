@@ -1,0 +1,125 @@
+---
+title: "Empirical Methods in Finance Homework 3"
+author: "YiTao Hu, Jin (Jane) Huangfu, Junyu (Kevin) Wu, Charles Rambo"
+date: "25/01/2020"
+output: pdf_document
+---
+
+## Problem 1
+
+#1 
+What is the First-order autocorrelation of yt?
+
+Recall from the slides that the first-order autocoreelation of ARMA(1,1) is given by:
+$$\rho_1=\phi_1-\theta_1\frac{\sigma^2_{\epsilon}}{\gamma_0}$$
+where $$\gamma_0=Var(Y_t)=\sigma^2_{\epsilon}\frac{1+\theta_1^2-2\phi_1\theta_1}{1-\phi^2_1}$$
+
+Put into code, we have $\gamma_0=$
+```{r}
+sigma_sq_epsilon=0.05^2
+phi_1=0.95
+theta_1=0.9
+gamma_0=sigma_sq_epsilon*((1+theta_1^2-2*phi_1*theta_1)/(1-phi_1^2))
+gamma_0
+
+```
+and $\rho_1=$
+```{r}
+rho_1=phi_1-theta_1*((sigma_sq_epsilon)/(gamma_0))
+rho_1
+```
+#2
+Recall from slides for higher order autocorrelation for ARMA(1,1): 
+$$\rho_j=\phi_1\rho_{j-1}$$
+put into codde, $\rho_2=\rho_1\phi_1=$
+```{r}
+rho_2=rho_1*phi_1
+rho_2
+```
+The ratio $\rho_2/\rho_1=\phi_1=0.95$
+```{r}
+rho_2/rho_1
+```
+The intuition is very simple. Compared with AR(1) model, the only difference with ARMA(1,1) Model is the effect of residual term one period before. 
+
+AR(1):$$R_t=\phi_0+\phi_1R_{t-1}+\epsilon_t, \epsilon_t \sim^{iid} WN(0,\sigma^2_{\epsilon})$$
+ARMA(1):$$R_t=\phi_0+\phi_1R_{t-1}+\epsilon_t-\theta_1\epsilon_{t-1}, \epsilon_t \sim^{iid} WN(0,\sigma^2_{\epsilon})$$
+
+and
+For AR(1): $\rho_j=\phi_1^j$. Because the last period residual has impacts on current process and the residuals further before have no impacts, the coefficient of the last period residual $\theta$ only influence first order autocorrelation $\rho_1$. Afterward, the influence of the last period residual die out, and so the higher order autocorrelation $\rho_j$ is a product of AR coefficient $\phi_1$
+
+
+Confirm with fuction generating theoretical autocorrelation. 
+```{r}
+ARMAacf(ar = 0.95,ma = -0.9,lag.max = 2,pacf = F)
+```
+
+#3
+Given the model, we know:
+$$Y_{t+1}=0.95Y_t-0.9\epsilon_t+\epsilon_{t+1}$$
+Take conditional expectation of $Y_t$:
+$$E(Y_{t+1}|Y_t)=0.95Y_t-0.9\epsilon_t=0.95*0.6-0.9*0.1=0.48$$
+
+$$Y_{t+2}=0.95Y_{t+1}-0.9\epsilon_{t+1}+\epsilon_{t+2}$$
+Take conditional expectation of $Y_t$
+$$E(Y_{t+2}|Y_t)=0.95E(Y_{t+1}|Y_t)=0.95*0.48=0.456$$
+#4
+Recall from last question, we know 
+$$\hat{X_t}=0.95Y_t-0.9\epsilon_t$$
+
+For the mean:
+$$E(\hat{X_t})=0.95E(Y_t)=0$$
+
+$$Var(\hat{X_t})=0.95^2Var(Y_t)+0.9^2Var(\epsilon_t)-2*0.95*0.9Cov(Y_t,\epsilon_t)$$
+where $$Cov(Y_t,\epsilon_t)=E(Y_t\epsilon_t)=E(\epsilon_t^2)=Var(\epsilon_t)=0.05^2$$ ($\epsilon_t$ is independent of $Y_{t-1}$ and $\epsilon_{t-1}$)
+
+Therefore,$Var(\hat{X_t})=$
+```{r}
+Var_Xt=0.95^2*gamma_0+0.9^2*sigma_sq_epsilon-2*0.95*0.9*sigma_sq_epsilon
+Var_Xt
+```
+and the standard deviation should be 
+```{r}
+Var_Xt^0.5
+```
+
+we know $Corr(\hat{X_t},\hat{X_{t-1}})=Cov(\hat{X_t},\hat{X_{t-1}})/Var(\hat{X_t})$
+
+Recall, $$\hat{X_{t+1}}=E(Y_{t+2}|Y_t)=0.95E(Y_{t+1}|Y_t)=0.95\hat{X_t}$$
+
+
+
+So, we want 
+$$Cov(\hat{X_t+1},\hat{X_{t}})=E(\hat{X_t},\hat{X_{t-1}})=0.95Var(\hat{X_{t}})$$
+
+Therefore:$Corr(\hat{X_t},\hat{X_{t-1}})=0.95$
+
+
+##Problem 2
+#1
+we know that 
+$$E_t=E_{t-1}+\epsilon_t, \epsilon_t \sim ^{iid}WN(0,1)$$ 
+if we assume $\phi=0$. This implies $E_t$ is a random walk without drift term. Using moving average representation, 
+$$E_t=\sum_{i=1}^t\epsilon_t$$ (Assume $E_0=0$)
+
+Therefore,
+$$Y_t=E_t-E_{t-4}=\epsilon_t+\epsilon_{t-1}+\epsilon_{t-2}+\epsilon_{t-3}$$
+Therefore, the autocovariances are: (note $\epsilon$ 's are iid)
+$$\gamma_0=Var(Y_t)=4\sigma^2_{\epsilon}=4$$
+
+$$\gamma_1=Cov(Y_t,Y_{t-1})=Cov(\epsilon_t+\epsilon_{t-1}+\epsilon_{t-2}+\epsilon_{t-3},+\epsilon_{t-1}+\epsilon_{t-2}+\epsilon_{t-3}+\epsilon_{t-4})=3\sigma^2_{\epsilon}=3$$
+By the same argument, $\gamma_2=2,\gamma_3=1,\gamma_4=0,\gamma_5=0$
+
+#2
+Recall ARMA(p,q): 
+$$Y_t=\phi_0+\sum_{i=1}^p\phi_iY_{t-i}+\sum_{j=1}^q\theta_j\epsilon_{t-j}+\epsilon_t$$
+and $$Y_t=E_t-E_{t-4}=\epsilon_t+\epsilon_{t-1}+\epsilon_{t-2}+\epsilon_{t-3}$$
+
+This can be represented by a MA(3) Model with $\theta_1=\theta_2=\theta_3=1,\mu_t=0$
+
+Alternatively, $$Y_t=Y_{t-1}+\epsilon_t-\epsilon_{t-4}$$
+
+So, it can also be represented by a ARMA(1,4) Model, with $\phi_1=1,\theta_4=-1$ and all other coefficients be 0.
+
+
+
