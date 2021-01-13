@@ -1,0 +1,110 @@
+---
+title: "Factor_Models"
+author: "YiTao Hu, Charles Rambo, Jane (jin) Huangfu, Kevin (Junyu) Wu"
+date: "08/03/2020"
+output: pdf_document
+---
+
+##1
+What is the sample mean, standard deviation, and Sharpe ratio of the excess returns these three assets?
+
+From the sample regression line, we know all three assets' excess returns have the following format:
+$$R^{E}_i=\alpha_i+\beta_iR^E_{mkt}+\hat{\epsilon}_{i,t}$$
+Taking expectations, we will have:
+$$E(R^{E}_i)=\alpha_i+\beta_iE(R^E_{mkt})$$
+Therefore, the sample mean for the three assets are 5.5%, 4.5% and 5.5%.
+
+Taking variance, we will have:
+$$Var(R^{E}_i)=\beta_i^2Var(R^E_{mkt})+Var(\hat{\epsilon}_{i,t})$$
+Therefore, the standard deviation for the three assets are 16.80%, 23.43% and 15.81%.
+
+From the statistics above, we can compute the sample Sharp ratio for the three assets: 0.327,0.192, and 0.348.
+
+##2
+For each of the three assets, construct the market-neutral versions by hedging out the market risk (Rjt). For each of these three hedged asset returns, give the sample average return, standard deviation, and Sharpe ratio.
+
+The market-neutral version of the portfolio would be:
+$$R^{\alpha}_{i,t}=\alpha_i+\epsilon_{i,t}$$
+Taking expectations, we will have:
+$$E(R^{\alpha}_{i,t})=\alpha_i$$
+So, the expectations of the three market-neutral portfolio would be 1%,-1.5%, and 0.5%.
+
+Taking Variance of the equation above, we will have:
+$$Var(R^{\alpha}_{i,t})=Var(\epsilon_{i,t})$$
+
+So, the standard deviation of the three assets above would be 10%,15%, and 5%
+
+The Sharp ratio would be 0.1,-0.1,and 0.1
+
+##3
+Calculate the maximum Sharpe ratio you can obtain by optimally combining the three hedged assets. Give the math behind this calculation.
+
+Recall the formula for maximum in-sample Sharpe ratio with mean-variance efficient portfolio:
+$$SR^2_{MVE}=\bar{R}^{eT}\hat{\Omega}^{-1}\bar{R}^{e}$$
+
+where $\bar{R}^{e}$ is a vector of excess returns of individual assets,and $\hat{\Omega}$ is the var-cov matrix of individual assets' excess return.
+
+Therefore, for the hedge alpha portfolio, we have maximum Sharpe Ratio of 
+```{r}
+R_alpha=c(0.01,-0.015,0.005)
+Omega_alpha=diag(c(0.1^2,0.15^2,0.05^2))
+SR_alpha=(t(R_alpha)%*%solve(Omega_alpha)%*%R_alpha)^0.5
+SR_alpha
+```
+
+##4
+Given your result in (3), what is the maximum Sharpe ratio you can obtain by combining these three assets with the market portfolio?
+
+By the same argument, we can compute the maximum Sharpe Ratio with the market portfolio.
+
+(Note: because the three market-neutral assets are hedged, they have 0 in-sample correlation with the market portfolio)
+```{r}
+R_alphaMkt=c(0.05,0.01,-0.015,0.005)
+Omega_alphaMkt=diag(c(0.15^2,0.1^2,0.15^2,0.05^2))
+SR_alphaMkt=(t(R_alphaMkt)%*%solve(Omega_alphaMkt)%*%R_alphaMkt)^0.5
+SR_alphaMkt
+```
+
+##5
+You have been told to form a portfolio today, assuming the historical estimates given above are the true values also going forward, that (a) provides the maximum (expected) Sharpe ratio of returns and (b) has an (expected) volatility of 15%. You can invest in the three assets, as well as the market portfolio.
+
+#a
+Give the portfolio weights (really, the loadings on each of these in total four assets since each asset is an excess return) that achieves objectives (a) and (b).
+
+Recall the MVE weighets vectorformula is:
+$$\omega^{MVE}=k\Omega^{-1}\bar{R}^e$$
+
+where the risk-averse coefficient k can be obtained by set some risk constraint
+$$k^2\bar{R}^{eT}\Omega^{-1}\bar{R}^{e}=0.15^2$$
+```{r}
+k=0.15/SR_alphaMkt
+k
+```
+with k, we can compute our MVE portfolio weights.
+```{r}
+w_MVE=(solve(Omega_alphaMkt)%*%R_alphaMkt)*as.numeric(k)
+w_MVE
+```
+#b
+Give the expected excess return, standard deviation, and Sharpe ratio of this portfolio. 
+
+Recall the expected return of this portfolio can be computed by 
+$$E(R_{port})=\omega^{MVE^T}\bar{R}^e$$
+```{r}
+R_port=t(w_MVE)%*%R_alphaMkt
+R_port
+```
+
+The standard deviation must equal to our object 15%, we can also compute by 
+$$Var(R_{port})=\omega^{MVE^T}\Omega\omega^{MVE}$$
+```{r}
+sd_port=(t(w_MVE)%*%Omega_alphaMkt%*%w_MVE)^0.5
+sd_port
+```
+
+Therefore, we would have a Sharpe ratio of
+```{r}
+Shape_port=R_port/as.numeric(sd_port)
+Shape_port
+```
+

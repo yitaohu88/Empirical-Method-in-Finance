@@ -1,0 +1,48 @@
+---
+title: "Volitility Models"
+author: "YiTao Hu"
+date: "24/02/2020"
+output: pdf_document
+---
+
+```{r}
+#import data 
+library(readr)
+CMA_monthly = read_csv("F-F_Research_Data_5_Factors_2x3.CSV", 
+     col_types = cols_only(CMA = col_guess(), 
+        Date = col_guess()))
+CMA_monthly$CMA=CMA_monthly$CMA/100
+CMA_daily=read_csv("F-F_Research_Data_5_Factors_2x3_daily.CSV",      col_types = cols_only(CMA = col_guess(),          Date = col_date(format = "%Y%m%d")))
+CMA_daily$CMA=CMA_daily$CMA/100
+```
+
+#1
+Estimate an ARMA(1,1) for the return series. Report the results. What is the estimated monthly persistence of expected returns to CMA? What is the half-life of the expected return series in months?
+
+Estimate the ARMA (1,1) Model and report fitted coefficients:
+$$R_t=\phi_0+\phi_1R_{t-1}+\theta_1\epsilon_{t-1}+\epsilon_t$$
+
+where $\epsilon_t\sim WN(0,\sigma_t)$
+```{r}
+ARMA_11=arima(x = CMA_monthly$CMA,order = c(1,0,1))
+ARMA_11
+```
+
+We can detect the persistence of the series from its Autocorrelation plot.
+```{r}
+acf(CMA_monthly$CMA)
+```
+From the graph above, we can conclude that the monthly CMA series rarely show any persistence pattern.
+
+define $Y_t=R_t-\mu_R$
+we have the process:
+$$Y_t=\phi_1Y_{t-1}+\theta_1\epsilon_{t-1}+\epsilon_t$$
+Then, we have the following:
+$$E_t[Y_{t+1}]=\phi_1Y_{t}+\theta_1\epsilon_{t}$$
+Using iterative law of expectation,
+$$E_t[Y_{t+2}]=E_t[E_{t+1}[Y_{t+2}]]=E_t[\phi_1Y_{t+1}+\theta_1\epsilon_{t+1}]=\phi_1^2Y_t+\theta_1\phi_1\epsilon_t=\phi_1(\phi_1Y_{t}+\theta_1\epsilon_{t})$$
+Then we have
+$$E_t[Y_{t+h}]=\phi^{h-1}(\phi_1Y_{t}+\theta_1\epsilon_{t})$$
+Recall, at half-life, the stochastic process is expected to cover 0.5 of the distance to the mean:
+$$E_t[Y_{t+h}]=\phi^{h-1}(\phi_1Y_{t}+\theta_1\epsilon_{t})=$$
+

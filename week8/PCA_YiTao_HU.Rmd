@@ -1,0 +1,119 @@
+---
+title: "Untitled"
+author: "YiTao Hu, Charles Rambo, Jin(jane) Huangfu, Junyu(Kevin) Wu"
+date: "27/02/2020"
+output: pdf_document
+---
+
+```{r message=FALSE, warning=FALSE}
+#import data and libraries
+library(readr)
+library(dplyr)
+library(DataAnalytics)
+Industry_Port_rtn= read_csv("48_Industry_Portfolios.CSV", 
+     col_types = cols(FabPr = col_skip(), 
+         Gold = col_skip(), Guns = col_skip(), 
+        Hlth = col_skip(), Soda = col_skip()))
+FF3Factors=read_csv("F-F_Research_Data_Factors.CSV")
+FF25Port=read_csv("25_Portfolios_5x5.CSV")
+```
+
+First,we need to preprocess data,compute the risk preium of each industry portfolio
+```{r}
+#compute risk-premium
+Industry_Port_rtn=Industry_Port_rtn-FF3Factors$RF
+Industry_Port_rtn=Industry_Port_rtn/100
+FF3Factors=FF3Factors/100
+FF25Port=FF25Port/100
+```
+
+#1
+Perform PCA
+```{r}
+PCA_model=prcomp(Industry_Port_rtn[-1])
+```
+
+To compute percentage of variance explained by each principal component, we use the following formula.
+$$Pct(Ci)=\frac{\lambda_i}{\sum^N_{i=1}\lambda_i}$$
+
+where N is the number of total component. $\lambda_i$ is the ith eigenvalue of the var-cov matrix.
+
+```{r}
+eigen_vals=PCA_model$sdev^2
+pct_var=eigen_vals/sum(eigen_vals)
+#plot the bar chart of pct variance explained by each PC
+barplot(pct_var,xlab = 'Order of Principal Component',ylab = '% Variance explained')
+```
+
+#2
+a.
+The variance first three PCs can explain 
+```{r}
+sum(pct_var[1:3])
+```
+b.
+To compute the principal component, we have to use the following formula:
+$$\vec{y_t}=U_{reduce}\vec{r_t}$$
+
+where $\vec{r_t}$ is the industry risk preium at time t, $\vec{y_t}$ is first k PCs' value at time t and $U_{reduce}$ is a matrix stacked by first k orthonormal eigen-vectors.
+```{r}
+U=PCA_model$rotation
+U_reduce=U[,1:3]
+#compute the series of first 3 PC
+PC3=as.matrix(Industry_Port_rtn[-1])%*%U_reduce
+```
+Here, we compute the mean and SD of the first 3 PC
+```{r}
+descStat(PC3)
+```
+Here, as we can see, the 3 PC has 0 correlation because they are orthogonized during the SVD.
+```{r}
+cor(PC3)
+```
+c.
+Because the factor loadings $\vec{\beta_i}$ should just be the row vectors of the reduced factorized matrix $U_{reduced}$ for each industry portfolio, the predictd 
+returns for all industries can be computed from the formula below:
+$$\hat{R}=YU^T_{reduce}$$
+
+where $\hat{R}$ is a 672 (timestep) by 43 (industry) matrix, and $Y$ is a 672 by 3 (factors) matrix and $U_{reduce}$ is a 43 (industry) by 3 (factors) matrix
+```{r}
+R_predicted=PC3%*%t(U_reduce)
+```
+
+Then we can plot actual sample returns over expected sample returns 
+```{r}
+plot(x = colMeans(R_predicted),y = colMeans(Industry_Port_rtn[-1]),type = 'p',main = 'Actual average return v.s. 3 PC factor predicred mean return',xlab  = '3 PC predicted mean return',ylab = 'Actual mean return')
+abline(c(0,1),col='red')
+```
+
+d.Then we can compute the implied cross-section R^2, which should be close to the percentage of variance explained by first three princial components.
+$$R^2_{cross-section}=1-\frac{Var(\hat{R})}{Var(\bar{R^{act}})}$$
+```{r}
+R_sq=1-mean(rowSums((Industry_Port_rtn[,-1]-R_predicted[,])^2))/mean(rowSums(Industry_Port_rtn[,-1]^2))
+R_sq
+```
+
+#3
+a.
+Perform PCA on the FF 25 portfolio 
+```{r}
+PCA_FF25Port=prcomp(FF25Port[,-1])
+```
+Plot the percentage variance explained by each principal component
+```{r}
+eigen_vals=PCA_FF25Port$sdev^2
+pct_var=eigen_vals/sum(eigen_vals)
+#plot the bar chart of pct variance explained by each PC
+barplot(pct_var,xlab = 'Order of Principal Component',ylab = '% Variance explained')
+```
+b.
+We can see the cumulative explanatory power of increasing factors, and then decide how many factors we want.
+```{r}
+cum_pct_var=cumsum(pct_var)
+names(cum_pct_var)=seq(1,length(cum_pct_var))
+cum_pct_var
+```
+
+From the table above, we can see
+if we want 95% explanatory power, we need to keep 5 factors.
+

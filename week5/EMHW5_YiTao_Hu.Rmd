@@ -1,0 +1,152 @@
+---
+title: "EMHW5"
+author: "YiTao Hu, Charles Rambo, Junyu(Kevin) Wu, Jin (Jane) Huangfu"
+date: "08/02/2020"
+output: pdf_document
+---
+
+## Problem 1: VAR implementation
+Use the data on quarterly excess stock market returns, the market Dividend / Price ratio, and the di§erence between the 10-yr Treasury yield and the Fed Funds rate in the excel spreadsheet "MktRet_DP_TermSpread.xlsx". The interest rate data is from the FRED data depository, available online from the St. Louis Fed.
+```{r message=FALSE, warning=FALSE}
+#import data and library
+library(ggplot2)
+library(expm)
+library(lmtest)
+library(sandwich)
+library(vars)
+library(DataAnalytics)
+library(readxl)
+HW5data = read_excel("MktRet_DP_TermSpread.xlsx")
+```
+
+
+#1
+Plot each series. Give the sample mean, standard deviation, and first order autocorrelation of each series. From the first-order autocorrelation, calculate the half-life of each series (see ARMA notes for exact half-life formula).
+
+Plot each Series.
+```{r}
+plot(x = HW5data$Date,y = HW5data$MktExRet,xlab = 'Time',ylab = 'Market Excess Return',main = 'Time Series of Market Excess Return',type = 'l')
+```
+```{r}
+plot(x = HW5data$Date,y = HW5data$Mkt_DP,xlab = 'Time',ylab = 'Market Dividend/Price Ratio',main = 'Time Series of Market Dividend/Price Ratio',type = 'l')
+```
+```{r}
+plot(x = HW5data$Date,y = HW5data$y10minFedFunds,xlab = 'Time',ylab = 'Term Spread (10 yr-FedFund)',main = 'Time Series of Term Spread',type = 'l')
+```
+Recall the formula for half life is:
+$$h=\frac{ln(0.5)}{ln(\phi_1)}$$
+
+```{r}
+#compute descriptive stats
+desrp_data=descStat(HW5data[,-1])
+#compute 1st order acf
+Phi_1=apply(X = HW5data[,-1],MARGIN = 2 , FUN = acf,lag.max=1,plot=F)
+Phi_1=c(Phi_1$MktExRet$acf[2],Phi_1$Mkt_DP$acf[2],Phi_1$y10minFedFunds$acf[2])
+desrp_data=cbind(desrp_data,Phi_1)
+HalfLife=log(0.5)/log(desrp_data[,9])
+desrp_data=cbind(desrp_data,HalfLife)
+desrp_data
+```
+#2
+Recall from the slides, the VAR(1) Model would follow the following hypothesis:
+$$\vec{y_t}=\vec{\phi_0}+\Phi_1\vec{y_{t-1}}+\vec{\epsilon_t}$$
+where $$\vec{y_t}=\begin{pmatrix} R^E_t\\ DP_t\\ SPD_t\end{pmatrix}$$
+$\vec{\phi_0}$ is the 3 by 1 constant coeff vector, $$\Phi$$ the 3 by 3 slop coeff matrix, and $\vec{\epsilon_t}$ is 3 by 1 residual vector. 
+Perform the VAR(1) regression, and the OLS coefficients and R-sq of each regression would be:
+```{r}
+Model_var1=VAR(y = HW5data[,-1],p = 1,type='const')
+summary(Model_var1)
+```
+The HC White robust standard error would be:
+```{r}
+coeftest(x=Model_var1,vcov.=vcovHC(Model_var1))
+```
+
+##3
+To test the stationarity of the VAR(1) Model, we need to check all the eigenvalues of the slope matrix $$\Phi_1$$ is smaller than 1 in modulus sense.
+```{r}
+# grab the slope coeff matrix
+est_coeff=coef(Model_var1)
+Phi=rbind(est_coeff$MktExRet[-4,1],est_coeff$Mkt_DP[-4,1],est_coeff$y10minFedFunds[-4,1])
+#compute the eigenvalues of the Phi matrix
+lambdas=eigen(x=Phi,only.values = T)$values
+lambdas
+```
+All eigenvalus are smaller than 1. Therefore the VAR(1) model is stationary, which is consistent with the summary of the library function. 
+
+##4
+Recall our first regression would be the following hypothesis:
+$$R^E_t=\phi_{0,R}+\phi_{1,R}R^E_{t-1}+\phi_{DP,R}DP_{t-1}+\phi_{SPD,R}SPD_{t-1}+\epsilon_{R,t}$$
+Taking conditional Variance of above at time t-1:
+$$Var_{t-1}(R^E_t)=Var(\epsilon_{R,t})$$
+Therefore:
+$$\hat{\sigma_{t-1}}(R^E_t)=\hat{\sigma}(\epsilon_{R,t})=\hat\sigma({e_{R,t}})=0.08239$$
+
+##5
+Plot the one-quarter ahead expected return series
+```{r}
+plot(y=Model_var1$varresult$MktExRet$fitted.values,type='l',x = HW5data$Date[-1],ylab='one Q forecast',xlab='Time',main='1 Q ahead forecasting')
+```
+
+Plot the four-quarter ahead expected return series.
+Recall the prediction h-period formula for VAR(1) model:
+$$E_t(\vec{y}_{t+h})=(I-\Phi_1^h)\vec{\mu}+\Phi_1^h\vec{y_t}$$
+```{r}
+mu=colMeans(HW5data[,-1])
+Y_t4=HW5data[-1:-4,-1]
+Forcast_4=t(matrix(rep((diag(3)-Phi%^%4)%*%mu,nrow(Y_t4)),nrow = 3)+(Phi%^%4)%*%t(Y_t4))
+plot(y=Forcast_4[,1],type='l',x = HW5data$Date[-1:-4],ylab='4 Q forecast',xlab='Time',main='4 Q ahead forecasting')
+```
+```{r}
+mu=colMeans(HW5data[,-1])
+Y_t20=HW5data[-1:-20,-1]
+Forcast_20=t(matrix(rep((diag(3)-Phi%^%20)%*%mu,nrow(Y_t20)),nrow = 3)+(Phi%^%20)%*%t(Y_t20))
+plot(y=Forcast_20[,1],type='l',x = HW5data$Date[-1:-20],ylab='20 Q forecast',xlab='Time',main='20 Q ahead forecasting')
+```
+For longer horizons, the predictive power of term spread and the DP-ratios diminished because long horizon conditional expectation converges to unconditional expectation $$E(R^E_t)$$, which is a constant. 
+
+##6
+The plot of impluse-response function of Excess Return itself, with orthogonalized shock version, with 95% bootstrapping confidence bands.
+```{r}
+IR_MktEX=irf(x = Model_var1,impulse = 'MktExRet',response = 'MktExRet',n.ahead = 20,ortho = T)
+plot(IR_MktEX)
+```
+
+The plot of impluse-response function of Market Dividend Pirce Ratio, with orthogonalized shock version, with 95% bootstrapping confidence bands.
+```{r}
+IR_MktDP=irf(x = Model_var1,impulse = 'Mkt_DP',response = 'MktExRet',n.ahead = 20,ortho = T)
+plot(IR_MktDP)
+```
+The plot of impluse-response function of Market Dividend Pirce Ratio, with orthogonalized shock version, with 95% bootstrapping confidence bands.
+```{r}
+IR_spd=irf(x = Model_var1,impulse = 'y10minFedFunds',response = 'MktExRet',n.ahead = 20,ortho = T)
+plot(IR_spd)
+```
+
+##7 
+To perform an out-of-sample test, we first need to split our data in to a 80% training set and 20% test set. Then, we fit our VAR(1) model on the training set, predict the t+1 observation, compare with the underground truth, and then roll over.
+```{r}
+# compute the out-of-sample prediction and absolute error
+Split_idx=round(nrow(HW5data)*0.8)
+Prediction_test=data.frame(matrix(0,nrow =(nrow(HW5data)-Split_idx),ncol = 3))
+colnames(Prediction_test)=c('Prediction','Observation','absError')
+Prediction_test$Observation=HW5data$MktExRet[(Split_idx+1):nrow(HW5data)]
+for (t in 1:(nrow(HW5data)-Split_idx)){
+  #fit the model
+  Model=VAR(y = HW5data[1:Split_idx,-1],p = 1,type = 'const')
+  Prediction_test$Prediction[t]=predict(object = Model,n.ahead = 1)[[1]][[1]][1]
+  Split_idx=Split_idx+1
+}
+Prediction_test$absError=abs(Prediction_test$Observation-Prediction_test$Prediction)
+Prediction_test$Date=HW5data$Date[(round(nrow(HW5data)*0.8)+1):nrow(HW5data)]
+```
+
+```{r}
+Prediction_test=as.zoo(Prediction_test)
+plot.zoo(Prediction_test[,-4],plot.type = 'single',col=c('blue','black','red'),main = 'VAR(1) out of sample test for Excess Returns',xlab = 'Q ahead',ylab = 'PCT')
+legend(x = 0,y = -0.1,legend = c('Prediction','Observed','AbsError'),col=c(3, 4, 6),fill = F)
+```
+
+
+
+
