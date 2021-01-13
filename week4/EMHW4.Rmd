@@ -1,0 +1,134 @@
+---
+title: "EM4"
+author: "YiTao Hu, Charles Rambo, Junyu(Kevin) Wu, Jin(Jane) Huangfu"
+date: "31/01/2020"
+output: pdf_document
+---
+
+## Probelm 1
+#1
+Using CRSP, get monthly market returns ex and cum dividends, as well as the monthly t-bill rate, from 1963 to 2018. Create the market dividend yield by summing the div- idends over the last 12 months and divide by current price (you can do this using information extracted using the ex- and cum-dividend returns). Construct excess re- turns by subtracting the log of the 1-month gross t-bill rate from the 1-month gross cum-dividends returns. Note: to get to gross returns you may have to add 1 to the original data series.
+From the St. Louis Fed data page (FRED; https://fred.stlouisfed.org/), get monthly data on the term and default spreads for the same sample. For the former, use the "10- Year Treasury Constant Maturity Minus Federal Funds Rate," for the latter subtract "Moodyís Seasoned Aaa Corporate Bond Minus Federal Funds Rate " from "Moodyís Seasoned Baa Corporate Bond Minus Federal Funds Rate."
+
+```{r}
+# import data and Library
+library(sandwich)
+library(readr)
+library(zoo)
+library(ggplot2)
+library(DataAnalytics)
+library(lmtest)
+HW4data <- read_csv("HW4data.csv", 
+     col_types = cols(DATE = col_date(format = "%Y%m%d")))
+
+Mkt <- read_csv("Mkt.csv", 
+     col_types = cols(DATE = col_date(format = "%Y%m%d")))
+
+#turn percentages in to dicimals
+HW4data[,5:7]=HW4data[,5:7]/100
+#compute the monthly div yield
+Mkt$mondiv=(Mkt$vwretd-Mkt$vwretx)*Mkt$totval
+#compute rolling annul dividend
+HW4data$annual_roll_div=rollapply(data = Mkt$mondiv,FUN=sum,width=12)[-1]
+HW4data$Mktval=Mkt$totval[13:nrow(Mkt)]
+#compute annaul div yield
+HW4data$div_yield=HW4data$annual_roll_div/HW4data$Mktval
+#compute monthly excess return
+HW4data$exRtn=HW4data$vwretd-log(1+HW4data$t30ret)
+#compute monthly default spread
+HW4data$dfsp=HW4data$BAAFFM-HW4data$AAAFFM
+#convert the data into a zoo obj
+HW4data=zoo(HW4data[,-1],order.by = HW4data$DATE)
+```
+
+#2 Plot your data
+```{r}
+Reg_data=HW4data[,c(10,9,4,11)]
+colnames(Reg_data)=c('Ex_trn','Div_yield','Term_spd','Creadit_spd')
+plot.zoo (Reg_data$Ex_trn,
+         xlab = 'Time',
+         main='Time Series of Mkt Ex Rtn')
+```
+```{r}
+plot.zoo (Reg_data$Div_yield,
+         xlab = 'Time',
+         main='Time Series of Div yield',type='l')
+```
+```{r}
+plot.zoo (Reg_data$Term_spd,
+         xlab = 'Time',
+         main='Time Series of Term Spread',type='l')
+```
+```{r}
+plot.zoo (Reg_data$Creadit_spd,
+         xlab = 'Time',
+         main='Time Series of Default Spread',type='l')
+```
+
+#3. 
+Using your three predictive variables (the lagged dividend yield, term spread, and default spread), forecast excess equity returns at the 1-month, 3-month, 12-month, 24-month, and 60-month horizons. Report your results from each of these regressions (regression coeffcients, standard errors, and R2s). The underlying data is monthly, so make sure to explain your choice of standard errors.
+For monthly Regression, the model would be:
+$$R^E_{t+1}=a+b^{(1)}_{div}DP_t+b^{(1)}_{term}TermSpd_t+b^{(1)}_{credit}CreditSpd_t+e_t$$
+
+```{r}
+one_month_model=lm(formula = Reg_data$Ex_trn[-1]~Reg_data$Div_yield[-nrow(Reg_data)]+Reg_data$Term_spd[-nrow(Reg_data)]+Reg_data$Creadit_spd[-nrow(Reg_data)])
+summary(one_month_model)
+```
+
+Perform Box-Lijung test on residual.
+```{r}
+Box.test(as.vector(one_month_model$residuals),lag = round(log(length(one_month_model$residuals))),type = 'Ljung-Box')
+```
+We do not perform NW standard errors, because there is no significant autocorrelation in residuals. 
+
+Define a function for horiaton regression
+```{r}
+horiton_estimate=function(dataframe=Reg_data,Lag=3){
+  #constract the new dataframe for new regression
+  Data_adj=cbind(as.vector(rollapply(dataframe[,1],width = Lag,FUN = sum,fill = NA,align = 'right')[-1:-Lag]),as.matrix(dataframe[-(nrow(dataframe)-(Lag-1)):-nrow(dataframe),-1]))
+  Data_adj=data.frame(Data_adj)
+  colnames(Data_adj)=c('Sum_EX_rtn','Lagged_Div_yield','Lagged_Term_Spd','Lagged_Credit_Spd')
+  
+  Model=lm(formula = Data_adj$Sum_EX_rtn~Data_adj$Lagged_Div_yield+Data_adj$Lagged_Term_Spd+Data_adj$Lagged_Credit_Spd)
+lmSumm(Model)
+print(Box.test(as.vector(Model$residuals),lag = round(log(length(Model$residuals))),type = 'Ljung-Box'))
+print('The NW standard error would be:')
+coeftest(x=Model,vcov. = NeweyWest(x = Model,lag = (Lag-1)*1.5,adjust = T))
+return (Model)
+}
+```
+
+For three month model:
+$$\sum^3_{i=1}R^E_i=a+b^{(3)}_{div}DP_t+b^{(3)}_{term}TermSpd_t+b^{(3)}_{credit}CreditSpd_t+e_{t+3}$$
+
+```{r}
+horiton_estimate(dataframe = Reg_data,Lag = 3)
+```
+
+For 12 month model:
+$$\sum^{12}_{i=1}R^E_i=a+b^{(12)}_{div}DP_t+b^{(12)}_{term}TermSpd_t+b^{(12)}_{credit}CreditSpd_t+e_{t+12}$$
+```{r}
+Model_12=horiton_estimate(dataframe = Reg_data,Lag = 12)
+```
+
+For 24 month model:
+$$\sum^{24}_{i=1}R^E_i=a+b^{(24)}_{div}DP_t+b^{(24)}_{term}TermSpd_t+b^{(24)}_{credit}CreditSpd_t+e_{t+12}$$
+```{r}
+horiton_estimate(dataframe = Reg_data,Lag = 24)
+```
+For 60 month model:
+$$\sum^{60}_{i=1}R^E_i=a+b^{(60)}_{div}DP_t+b^{(60)}_{term}TermSpd_t+b^{(60)}_{credit}CreditSpd_t+e_{t+12}$$
+```{r}
+horiton_estimate(Lag = 60)
+```
+#4
+Plot the fitted values for 12 months 
+```{r}
+plot(y=rollapply(Reg_data$Ex_trn,width = 12,FUN = sum)[-1],x=index(Reg_data[-1:-12,]),type='l',xlab = 'Time',ylab  = 'Excess Rtn')
+lines(y = Model_12$fitted.values,col='red',x = index(Reg_data[-1:-12,]))
+legend(x = as.Date('1963/02/28'),y = -0.3,legend = c('Actual','Predicted'),col = c('black','red'))
+```
+
+
+
+
